@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net10.0-android</TargetFramework>
+		<SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+		<OutputType>Exe</OutputType>
+		<RootNamespace>CelesteAndroid</RootNamespace>
+		<ApplicationId>org.celesteandroid.celeste</ApplicationId>
+		<ApplicationTitle>Celeste</ApplicationTitle>
+		<ApplicationVersion>3</ApplicationVersion>
+		<ApplicationDisplayVersion>1.6.0</ApplicationDisplayVersion>
+		<RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+		<EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+		<AndroidPackageFormat>apk</AndroidPackageFormat>
+		<PublishTrimmed>false</PublishTrimmed>
+		<AndroidLinkMode>None</AndroidLinkMode>
+		<RunAOTCompilation>false</RunAOTCompilation>
+		<AndroidEnableMarshalMethods>false</AndroidEnableMarshalMethods>
+		<NoWarn>$(NoWarn);CS8618;CS8625;CS8766;CS1572;BG8A04;BG8A00;BG8403</NoWarn>
+	</PropertyGroup>
+	<PropertyGroup>
+		<GameArtDir>$(MSBuildThisFileDirectory)GameArt\</GameArtDir>
+		<HasGameIcon Condition="Exists('$(GameArtDir)icon\res\mipmap-xxxhdpi\ic_celeste.png')">true</HasGameIcon>
+		<HasGameArt Condition="'$(UseGameArt)' != 'false' and Exists('$(GameArtDir)art\res')">true</HasGameArt>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(AndroidSigningKeyStore)' != ''">
+		<AndroidKeyStore>true</AndroidKeyStore>
+	</PropertyGroup>
+	<ItemGroup>
+		<AndroidJavaSource Include="$(RepoRoot)external\SDL\android-project\app\src\main\java\org\libsdl\app\*.java" Bind="true" />
+		<TransformFile Include="Transforms\Metadata.xml" />
+		<AndroidNativeLibrary Include="$(RepoRoot)natives\android-arm64\*.so" Abi="arm64-v8a" />
+		<AndroidNativeLibrary Include="$(RepoRoot)fmod\libs\android-arm64\*.so" Abi="arm64-v8a" />
+		<AndroidLibrary Include="$(RepoRoot)fmod\libs\android-arm64\fmod.jar" Bind="true" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(HasGameIcon)' == 'true'">
+		<AndroidResource Include="$(GameArtDir)icon\res\**\*" Link="Resources\%(RecursiveDir)%(Filename)%(Extension)" />
+		<AndroidResource Include="ResourceAliases\icon_game.xml" Link="Resources\values\alias_icon.xml" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(HasGameIcon)' != 'true'">
+		<AndroidResource Include="ResourceAliases\icon_fallback.xml" Link="Resources\values\alias_icon.xml" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(HasGameArt)' == 'true'">
+		<AndroidResource Include="$(GameArtDir)art\res\**\*" Link="Resources\%(RecursiveDir)%(Filename)%(Extension)" />
+		<AndroidResource Include="ResourceAliases\art_game.xml" Link="Resources\values\alias_art.xml" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(HasGameArt)' != 'true'">
+		<AndroidResource Include="ResourceAliases\art_fallback.xml" Link="Resources\values\alias_art.xml" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Remove="ResourceAliases\**" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(EmbedGame)' == 'true'">
+		<AndroidAsset Include="$(CelesteGameDir)Celeste.exe" LogicalName="game/Celeste.exe" />
+		<AndroidAsset Include="$(CelesteGameDir)Content\**\*" LogicalName="game/Content/%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+	<ItemGroup>
+		<Compile Include="..\Celeste.Android.Patches\PixelButtonArt.cs" Link="PixelButtonArt.cs" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\..\external\FNA\FNA.Core.csproj" />
+		<ProjectReference Include="..\Steamworks.NET\Steamworks.NET.csproj" />
+		<ProjectReference Include="..\Celeste.Patcher\Celeste.Patcher.csproj" />
+		<ProjectReference Include="..\Celeste.Android.Patches\Celeste.Android.Patches.csproj"
+			ReferenceOutputAssembly="false" OutputItemType="CelestePatchModule" />
+	</ItemGroup>
+	<Target Name="_AddPatcherAssets" BeforeTargets="_ComputeAndroidAssetsPaths">
+		<ItemGroup>
+			<AndroidAsset Include="@(CelestePatchModule)" LogicalName="patcher/%(Filename)%(Extension)" />
+			<AndroidAsset Include="@(ReferencePath)" Condition="'%(Filename)' == 'FNA' or '%(Filename)' == 'Steamworks.NET' or '%(Filename)' == 'MonoMod.Patcher'"
+				LogicalName="patcher/%(Filename)%(Extension)" />
+		</ItemGroup>
+	</Target>
+</Project>

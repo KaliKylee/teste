@@ -1,0 +1,9 @@
+<Project>
+	<PropertyGroup>
+		<RepoRoot>$([System.IO.Path]::GetFullPath($(MSBuildThisFileDirectory)..\))</RepoRoot>
+		<CelesteGameDir Condition="'$(CelesteGameDir)' == ''">$(RepoRoot)Celeste\</CelesteGameDir>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>disable</ImplicitUsings>
+	</PropertyGroup>
+</Project>
