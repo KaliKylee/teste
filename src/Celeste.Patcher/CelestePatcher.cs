@@ -34,20 +34,42 @@ namespace CelesteAndroid.Patcher
 			List<string> deps = dependencyDirs.Append(everestDir).Append(Path.GetDirectoryName(Path.GetFullPath(androidMod))!).ToList();
 			string stage1 = outputDll + ".everest.tmp";
 
-			log("[Everest 1/4] Instalando o Everest no Celeste.exe");
-			RunPatch(celesteExe, stage1, new[] { everestMm }, deps, log, finalize: false);
+			void Stage(string name, Action action)
+			{
+				log("[Everest] " + name);
+				try
+				{
+					action();
+				}
+				catch (Exception e)
+				{
+					throw new Exception($"[{name}] {Describe(e)}", e);
+				}
+			}
 
-			log("[Everest 2/4] Gerando MMHOOK_Celeste.dll");
-			GenerateHooks(stage1, mmhook, everestDir, deps, log);
-
-			log("[Everest 3/4] Ajustando MMHOOK_Celeste.dll");
-			RunPatch(mmhook, mmhook + ".tmp", new[] { everestMm }, deps, log, finalize: false);
-			File.Move(mmhook + ".tmp", mmhook, overwrite: true);
-
-			log("[Everest 4/4] Aplicando patches do Android");
-			RunPatch(stage1, outputDll, new[] { androidMod }, deps, log, finalize: true);
+			Stage("1/4 instalar no Celeste.exe", () => RunPatch(celesteExe, stage1, new[] { everestMm }, deps, log, finalize: false));
+			Stage("2/4 gerar MMHOOK", () => GenerateHooks(stage1, mmhook, everestDir, deps, log));
+			Stage("3/4 ajustar MMHOOK", () =>
+			{
+				RunPatch(mmhook, mmhook + ".tmp", new[] { everestMm }, deps, log, finalize: false);
+				File.Move(mmhook + ".tmp", mmhook, overwrite: true);
+			});
+			Stage("4/4 patches do Android", () => RunPatch(stage1, outputDll, new[] { androidMod }, deps, log, finalize: true));
 			File.Delete(stage1);
 			log($"Celeste + Everest patcheado: {outputDll}");
+		}
+
+		/// <summary>Causa raiz + primeiras linhas da pilha, para o erro mostrado na tela dizer onde falhou.</summary>
+		public static string Describe(Exception e)
+		{
+			Exception inner = e;
+			while (inner.InnerException != null)
+				inner = inner.InnerException;
+			IEnumerable<string> frames = (inner.StackTrace ?? "").Split('\n')
+				.Select(l => l.Trim()).Where(l => l.Length > 0).Take(4)
+				.Select(l => l.StartsWith("at ") ? l[3..] : l)
+				.Select(l => { int paren = l.IndexOf('('); return paren > 0 ? l[..paren] : l; });
+			return $"{inner.GetType().Name}: {inner.Message} @ {string.Join(" < ", frames)}";
 		}
 
 		private static void RunPatch(string input, string output, IEnumerable<string> mods, IEnumerable<string> dependencyDirs, Action<string> log, bool finalize)
