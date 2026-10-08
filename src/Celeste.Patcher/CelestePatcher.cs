@@ -121,10 +121,29 @@ namespace CelesteAndroid.Patcher
 			modder.Read();
 			modder.MapDependencies();
 
+			const BindingFlags Flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
 			object gen = Activator.CreateInstance(genType, modder, Path.GetFileName(mmhookOutput))!;
-			genType.GetProperty("HookPrivate")?.SetValue(gen, true);
-			genType.GetMethod("Generate", Type.EmptyTypes)!.Invoke(gen, null);
-			var output = (ModuleDefinition)genType.GetProperty("OutputModule")!.GetValue(gen)!;
+
+			// No MonoMod esses membros são campos públicos; aceita campo ou propriedade.
+			void Set(string name, object value)
+			{
+				FieldInfo? f = genType.GetField(name, Flags);
+				if (f != null) { f.SetValue(gen, value); return; }
+				genType.GetProperty(name, Flags)?.SetValue(gen, value);
+			}
+			object? Get(string name) => genType.GetField(name, Flags)?.GetValue(gen) ?? genType.GetProperty(name, Flags)?.GetValue(gen);
+
+			Set("HookPrivate", true);
+
+			MethodInfo generate = genType.GetMethods(Flags).FirstOrDefault(m => m.Name == "Generate" && m.GetParameters().All(p => p.IsOptional))
+				?? throw new MissingMethodException("HookGenerator.Generate não encontrado. Membros: "
+					+ string.Join(", ", genType.GetMembers(Flags).Select(m => m.Name).Distinct().Take(30)));
+			generate.Invoke(gen, generate.GetParameters().Select(p => p.DefaultValue).ToArray());
+
+			var output = Get("OutputModule") as ModuleDefinition
+				?? throw new InvalidOperationException("HookGenerator não produziu OutputModule. Membros: "
+					+ string.Join(", ", genType.GetMembers(Flags).Select(m => m.Name).Distinct().Take(30)));
 			output.Write(mmhookOutput);
 		}
 
