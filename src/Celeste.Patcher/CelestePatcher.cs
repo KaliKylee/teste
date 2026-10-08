@@ -51,7 +51,8 @@ namespace CelesteAndroid.Patcher
 			Stage("2/4 gerar MMHOOK", () => GenerateHooks(stage1, mmhook, everestDir, deps, log));
 			Stage("3/4 ajustar MMHOOK", () =>
 			{
-				RunPatch(mmhook, mmhook + ".tmp", new[] { everestMm }, deps, log, finalize: false);
+				// As regras do Everest leem os atributos dos tipos do MMHOOK: precisa ler tudo (não adiado), como o Webleste faz.
+				RunPatch(mmhook, mmhook + ".tmp", new[] { everestMm }, deps, log, finalize: false, ReadingMode.Immediate);
 				File.Move(mmhook + ".tmp", mmhook, overwrite: true);
 			});
 			Stage("4/4 patches do Android", () => RunPatch(stage1, outputDll, new[] { androidMod }, deps, log, finalize: true));
@@ -72,7 +73,7 @@ namespace CelesteAndroid.Patcher
 			return $"{inner.GetType().Name}: {inner.Message} @ {string.Join(" < ", frames)}";
 		}
 
-		private static void RunPatch(string input, string output, IEnumerable<string> mods, IEnumerable<string> dependencyDirs, Action<string> log, bool finalize)
+		private static void RunPatch(string input, string output, IEnumerable<string> mods, IEnumerable<string> dependencyDirs, Action<string> log, bool finalize, ReadingMode readingMode = ReadingMode.Deferred)
 		{
 			Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
 
@@ -80,7 +81,7 @@ namespace CelesteAndroid.Patcher
 			{
 				InputPath = input,
 				OutputPath = output,
-				ReadingMode = ReadingMode.Deferred,
+				ReadingMode = readingMode,
 				MissingDependencyThrow = false,
 			};
 			modder.DependencyDirs.AddRange(dependencyDirs);
