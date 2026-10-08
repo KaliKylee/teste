@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 using Android.Content;
@@ -50,13 +51,32 @@ namespace CelesteAndroid
 
 			Assembly celeste = AssemblyLoadContext.Default.LoadFromAssemblyPath(dll);
 
-			celeste.GetType("Monocle.Engine", throwOnError: true)!
-				.GetField("AssemblyDirectory", BindingFlags.NonPublic | BindingFlags.Static)!
-				.SetValue(null, gameDir);
+			// O Everest muda a visibilidade de vários membros (Main vira público, por exemplo): procura em qualquer visibilidade.
+			const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
 
-			MethodInfo main = celeste.GetType("Celeste.Celeste", throwOnError: true)!
-				.GetMethod("Main", BindingFlags.NonPublic | BindingFlags.Static)!;
-			main.Invoke(null, new object[] { Array.Empty<string>() });
+			Type engine = celeste.GetType("Monocle.Engine", throwOnError: true)!;
+			FieldInfo? assemblyDirField = engine.GetField("AssemblyDirectory", Any);
+			if (assemblyDirField != null)
+			{
+				assemblyDirField.SetValue(null, gameDir);
+			}
+			else
+			{
+				PropertyInfo? assemblyDirProp = engine.GetProperty("AssemblyDirectory", Any);
+				if (assemblyDirProp?.CanWrite == true)
+					assemblyDirProp.SetValue(null, gameDir);
+				else
+					Log.Warn(GameActivity.LogTag, "Monocle.Engine.AssemblyDirectory não encontrado; seguindo sem definir.");
+			}
+
+			Type celesteType = celeste.GetType("Celeste.Celeste", throwOnError: true)!;
+			MethodInfo main = celesteType.GetMethod("Main", Any)
+				?? throw new MissingMethodException("Celeste.Celeste.Main não encontrado. Métodos estáticos: "
+					+ string.Join(", ", celesteType.GetMethods(Any).Select(m => m.Name).Distinct().Take(30)));
+
+			Log.Info(GameActivity.LogTag, $"Chamando {main.DeclaringType}.{main.Name} ({main.GetParameters().Length} parâmetro(s))");
+			object?[]? args = main.GetParameters().Length == 0 ? null : new object?[] { Array.Empty<string>() };
+			main.Invoke(null, args);
 		}
 	}
 }
