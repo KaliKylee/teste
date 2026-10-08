@@ -7,7 +7,7 @@
 		<ApplicationId>org.celesteandroid.celeste</ApplicationId>
 		<ApplicationTitle>Celeste</ApplicationTitle>
 		<ApplicationVersion>3</ApplicationVersion>
-		<ApplicationDisplayVersion>1.6.0</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>1.0.1</ApplicationDisplayVersion>
 		<RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
 		<EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
 		<AndroidPackageFormat>apk</AndroidPackageFormat>
@@ -63,8 +63,14 @@
 		<ProjectReference Include="..\Celeste.Android.Patches\Celeste.Android.Patches.csproj"
 			ReferenceOutputAssembly="false" OutputItemType="CelestePatchModule" />
 	</ItemGroup>
+	<ItemGroup>
+		<!-- Referências do .NET 8 (só metadados) usadas pelo MonoMod no aparelho para resolver o que o Everest referencia (System.Runtime etc.). -->
+		<PackageDownload Include="Microsoft.NETCore.App.Ref" Version="[8.0.0]" />
+	</ItemGroup>
 	<Target Name="_AddPatcherAssets" BeforeTargets="_ComputeAndroidAssetsPaths">
 		<ItemGroup>
+			<_NetRefDll Include="$(NuGetPackageRoot)microsoft.netcore.app.ref/8.0.0/ref/net8.0/*.dll" />
+			<AndroidAsset Include="@(_NetRefDll)" LogicalName="patcher/refs/%(Filename)%(Extension)" />
 			<AndroidAsset Include="@(CelestePatchModule)" LogicalName="patcher/%(Filename)%(Extension)" />
 			<AndroidAsset Include="@(ReferencePath)" Condition="'%(Filename)' == 'FNA' or '%(Filename)' == 'Steamworks.NET' or '%(Filename)' == 'MonoMod.Patcher'"
 				LogicalName="patcher/%(Filename)%(Extension)" />

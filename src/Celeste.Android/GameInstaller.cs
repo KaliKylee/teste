@@ -180,13 +180,25 @@ namespace CelesteAndroid
 		{
 			string patcherDir = Path.Combine(context.CacheDir!.AbsolutePath, "patcher");
 			Directory.CreateDirectory(patcherDir);
-			foreach (string asset in context.Assets!.List("patcher")!)
+			CopyAssetDir("patcher", patcherDir);
+			return patcherDir;
+		}
+
+		private void CopyAssetDir(string assetPath, string targetDir)
+		{
+			Directory.CreateDirectory(targetDir);
+			foreach (string child in context.Assets!.List(assetPath)!)
 			{
-				using Stream input = context.Assets.Open("patcher/" + asset);
-				using FileStream output = File.Create(Path.Combine(patcherDir, asset));
+				string childAsset = assetPath + "/" + child;
+				if (context.Assets.List(childAsset)!.Length > 0)
+				{
+					CopyAssetDir(childAsset, Path.Combine(targetDir, child));
+					continue;
+				}
+				using Stream input = context.Assets.Open(childAsset);
+				using FileStream output = File.Create(Path.Combine(targetDir, child));
 				input.CopyTo(output);
 			}
-			return patcherDir;
 		}
 
 		public void InstallEverest()
@@ -215,7 +227,7 @@ namespace CelesteAndroid
 					everestDir,
 					Path.Combine(patcherDir, "Celeste.Android.mm.dll"),
 					staging,
-					new[] { patcherDir },
+					new[] { patcherDir, Path.Combine(patcherDir, "refs") },
 					Log);
 				File.Move(staging, output, overwrite: true);
 				foreach (string leftover in Directory.GetFiles(Path.GetDirectoryName(output)!, "*.mdb"))
@@ -225,7 +237,7 @@ namespace CelesteAndroid
 			{
 				File.AppendAllText(log, e + "\n");
 				Log_(e.ToString());
-				throw new InstallException(L.EverestFailed(e.GetType().Name + ": " + e.Message));
+				throw new InstallException(L.EverestFailed(e.Message.StartsWith("[") ? e.Message : e.GetType().Name + ": " + e.Message));
 			}
 		}
 
