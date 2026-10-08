@@ -237,7 +237,7 @@ namespace CelesteAndroid
 			{
 				File.AppendAllText(log, e + "\n");
 				Log_(e.ToString());
-				throw new InstallException(L.EverestFailed(e.Message.StartsWith("[") ? e.Message : e.GetType().Name + ": " + e.Message));
+				throw new InstallException(L.EverestFailed(e.Message.StartsWith("[") ? e.Message : CelestePatcher.Describe(e)));
 			}
 		}
 
