@@ -103,8 +103,7 @@ namespace CelesteAndroid
 		/// (NotImplementedException em PlatformTriple.CreateCurrentSystem). Como o Android é Linux por baixo,
 		/// troca o valor detectado para Linux antes de qualquer detour ser criado.
 		/// </summary>
-		// A libc do Android (bionic) não tem __errno_location (só __errno). O MonoMod.Core importa o primeiro,
-		// então troca o nome no metadado da DLL (mesmo tamanho de campo, terminado em zero) e carrega essa cópia antes de tudo.
+		// A libc do Android (bionic) difere da glibc que o MonoMod.Core espera (errno, sysconf, /tmp): ajusta a DLL e carrega a cópia corrigida.
 		private static void PatchMonoModCoreForAndroid(string everestDir)
 		{
 			try
@@ -116,40 +115,55 @@ namespace CelesteAndroid
 					return;
 				}
 
-				byte[] data = File.ReadAllBytes(path);
-				byte[] from = Encoding.ASCII.GetBytes("__errno_location\0");
-				byte[] to = new byte[from.Length];
-				Encoding.ASCII.GetBytes("__errno").CopyTo(to, 0);
+				CelesteAndroid.Patcher.MonoModCoreFix.Apply(path, m => Log.Info(GameActivity.LogTag, m));
 
-				int count = 0;
-				for (int i = 0; i <= data.Length - from.Length; i++)
-				{
-					bool match = true;
-					for (int j = 0; j < from.Length; j++)
-					{
-						if (data[i + j] != from[j]) { match = false; break; }
-					}
-					if (!match) continue;
-					Array.Copy(to, 0, data, i, to.Length);
-					count++;
-					i += from.Length - 1;
-				}
-				if (count > 0)
-				{
-					File.WriteAllBytes(path, data);
-					Log.Info(GameActivity.LogTag, $"MonoMod.Core: __errno_location -> __errno ({count}x).");
-				}
-
-				string name = "MonoMod.Core";
-				Assembly? loaded = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == name);
+				Assembly? loaded = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "MonoMod.Core");
 				if (loaded != null)
 					Log.Warn(GameActivity.LogTag, "MonoMod.Core já estava carregado (" + loaded.Location + "); a cópia corrigida pode não ser usada.");
 				else
-					AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+					loaded = AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+
+				Log.Info(GameActivity.LogTag, "Tamanho de página: " + Environment.SystemPageSize);
+				TestExceptionHelper(loaded);
 			}
 			catch (Exception e)
 			{
 				Log.Error(GameActivity.LogTag, "Falha ao ajustar MonoMod.Core: " + e);
+			}
+		}
+
+		// Diagnóstico: o MonoMod extrai uma biblioteca nativa (exhelper) de dentro da DLL e a carrega; testa se o Android aceita.
+		private static void TestExceptionHelper(Assembly core)
+		{
+			string? temp = null;
+			try
+			{
+				string arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x86_64";
+				string? resource = core.GetManifestResourceNames().FirstOrDefault(n => n.Contains("exhelper_linux_" + arch));
+				if (resource == null)
+				{
+					Log.Warn(GameActivity.LogTag, "exhelper: recurso não encontrado. Recursos: " + string.Join(", ", core.GetManifestResourceNames()));
+					return;
+				}
+
+				temp = Path.Combine(Path.GetTempPath(), "exhelper-test.so");
+				using (Stream s = core.GetManifestResourceStream(resource)!)
+				using (FileStream f = File.Create(temp))
+					s.CopyTo(f);
+
+				IntPtr handle = System.Runtime.InteropServices.NativeLibrary.Load(temp);
+				foreach (string export in new[] { "mmh_clear_cache", "eh_native_to_managed" })
+					Log.Info(GameActivity.LogTag, $"exhelper: {export} = {(System.Runtime.InteropServices.NativeLibrary.TryGetExport(handle, export, out _) ? "ok" : "AUSENTE")}");
+				System.Runtime.InteropServices.NativeLibrary.Free(handle);
+				Log.Info(GameActivity.LogTag, "exhelper: biblioteca nativa carregada com sucesso.");
+			}
+			catch (Exception e)
+			{
+				Log.Error(GameActivity.LogTag, "exhelper: falha ao carregar a biblioteca nativa: " + e.Message);
+			}
+			finally
+			{
+				try { if (temp != null) File.Delete(temp); } catch { }
 			}
 		}
 
