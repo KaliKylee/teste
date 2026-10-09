@@ -35,6 +35,7 @@ namespace CelesteAndroid
 				string everestDir = EverestInstaller.EverestDir(context);
 				Log.Info(GameActivity.LogTag, "Everest ativado: " + dll);
 				InstallDiagnostics(gameDir);
+				PatchMonoModCoreForAndroid(everestDir);
 				ForceLinuxPlatform();
 				AssemblyLoadContext.Default.Resolving += (ctx, name) =>
 				{
@@ -102,6 +103,56 @@ namespace CelesteAndroid
 		/// (NotImplementedException em PlatformTriple.CreateCurrentSystem). Como o Android é Linux por baixo,
 		/// troca o valor detectado para Linux antes de qualquer detour ser criado.
 		/// </summary>
+		// A libc do Android (bionic) não tem __errno_location (só __errno). O MonoMod.Core importa o primeiro,
+		// então troca o nome no metadado da DLL (mesmo tamanho de campo, terminado em zero) e carrega essa cópia antes de tudo.
+		private static void PatchMonoModCoreForAndroid(string everestDir)
+		{
+			try
+			{
+				string path = Path.Combine(everestDir, "MonoMod.Core.dll");
+				if (!File.Exists(path))
+				{
+					Log.Warn(GameActivity.LogTag, "MonoMod.Core.dll não encontrado em " + everestDir);
+					return;
+				}
+
+				byte[] data = File.ReadAllBytes(path);
+				byte[] from = Encoding.ASCII.GetBytes("__errno_location\0");
+				byte[] to = new byte[from.Length];
+				Encoding.ASCII.GetBytes("__errno").CopyTo(to, 0);
+
+				int count = 0;
+				for (int i = 0; i <= data.Length - from.Length; i++)
+				{
+					bool match = true;
+					for (int j = 0; j < from.Length; j++)
+					{
+						if (data[i + j] != from[j]) { match = false; break; }
+					}
+					if (!match) continue;
+					Array.Copy(to, 0, data, i, to.Length);
+					count++;
+					i += from.Length - 1;
+				}
+				if (count > 0)
+				{
+					File.WriteAllBytes(path, data);
+					Log.Info(GameActivity.LogTag, $"MonoMod.Core: __errno_location -> __errno ({count}x).");
+				}
+
+				string name = "MonoMod.Core";
+				Assembly? loaded = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == name);
+				if (loaded != null)
+					Log.Warn(GameActivity.LogTag, "MonoMod.Core já estava carregado (" + loaded.Location + "); a cópia corrigida pode não ser usada.");
+				else
+					AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+			}
+			catch (Exception e)
+			{
+				Log.Error(GameActivity.LogTag, "Falha ao ajustar MonoMod.Core: " + e);
+			}
+		}
+
 		private static void ForceLinuxPlatform()
 		{
 			try
