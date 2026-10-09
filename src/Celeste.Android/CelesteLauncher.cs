@@ -35,6 +35,7 @@ namespace CelesteAndroid
 				string everestDir = EverestInstaller.EverestDir(context);
 				Log.Info(GameActivity.LogTag, "Everest ativado: " + dll);
 				InstallDiagnostics(gameDir);
+				ForceLinuxPlatform();
 				AssemblyLoadContext.Default.Resolving += (ctx, name) =>
 				{
 					try
@@ -93,6 +94,40 @@ namespace CelesteAndroid
 			{
 				if (everest)
 					DumpEverestLogs(gameDir);
+			}
+		}
+
+		/// <summary>
+		/// O MonoMod.Core detecta o Android (existem /data e /system/build.prop) e não tem sistema para ele
+		/// (NotImplementedException em PlatformTriple.CreateCurrentSystem). Como o Android é Linux por baixo,
+		/// troca o valor detectado para Linux antes de qualquer detour ser criado.
+		/// </summary>
+		private static void ForceLinuxPlatform()
+		{
+			try
+			{
+				Assembly utils = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "MonoMod.Utils")
+					?? Assembly.Load(new AssemblyName("MonoMod.Utils"));
+				Type detection = utils.GetType("MonoMod.Utils.PlatformDetection", throwOnError: true)!;
+
+				object? detected = detection.GetProperty("OS", BindingFlags.Public | BindingFlags.Static)?.GetValue(null); // força a detecção
+				FieldInfo? os = detection.GetField("os", BindingFlags.NonPublic | BindingFlags.Static);
+				Log.Info(GameActivity.LogTag, $"MonoMod detectou o SO como: {detected}");
+				if (os == null)
+				{
+					Log.Warn(GameActivity.LogTag, "PlatformDetection.os não encontrado; membros: "
+						+ string.Join(", ", detection.GetFields(BindingFlags.NonPublic | BindingFlags.Static).Select(f => f.Name)));
+					return;
+				}
+				if (os.GetValue(null)?.ToString() == "Android")
+				{
+					os.SetValue(null, Enum.Parse(os.FieldType, "Linux"));
+					Log.Info(GameActivity.LogTag, "MonoMod: SO trocado de Android para Linux.");
+				}
+			}
+			catch (Exception e)
+			{
+				Log.Error(GameActivity.LogTag, "Falha ao ajustar a detecção de plataforma do MonoMod: " + e);
 			}
 		}
 
