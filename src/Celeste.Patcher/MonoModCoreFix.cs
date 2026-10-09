@@ -15,6 +15,14 @@ namespace CelesteAndroid.Patcher
 	/// </summary>
 	public static class MonoModCoreFix
 	{
+		// Não resolve referências (o aparelho não tem o System.Runtime 8.0 completo); só editamos IL e metadados desta DLL.
+		private sealed class NoResolver : IAssemblyResolver
+		{
+			public AssemblyDefinition Resolve(AssemblyNameReference name) => throw new AssemblyResolutionException(name);
+			public AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters) => throw new AssemblyResolutionException(name);
+			public void Dispose() { }
+		}
+
 		private const int GlibcPageSize = 30;
 		private const int BionicPageSize = 39;
 		private const string TempTemplate = "/tmp/mm-exhelper.so.XXXXXX";
@@ -27,7 +35,7 @@ namespace CelesteAndroid.Patcher
 
 			using (var input = new MemoryStream(data))
 			{
-				ModuleDefinition module = ModuleDefinition.ReadModule(input, new ReaderParameters(ReadingMode.Immediate));
+				ModuleDefinition module = ModuleDefinition.ReadModule(input, new ReaderParameters(ReadingMode.Deferred) { AssemblyResolver = new NoResolver() });
 				int errno = 0, sysconf = 0;
 
 				foreach (TypeDefinition type in module.GetTypes())
